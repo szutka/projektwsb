@@ -3,7 +3,6 @@ from io import BytesIO
 import requests
 from PIL import Image, ImageTk
 from PIL.ImageTk import PhotoImage
-from imagesfetcher import fetchNASAimages
 
 
 class NASAimages:
@@ -11,7 +10,7 @@ class NASAimages:
         self.api_url = "https://images-api.nasa.gov/search"
 
     def pobierzZdjecia(self, query):
-        params = {'q': query}
+        params = {'q': query} #params to zapytanie GET (np. ?q=moon).
         response = requests.get(self.api_url, params=params)
 
         if response.status_code == 200:
@@ -20,7 +19,7 @@ class NASAimages:
             raise Exception(f"Nie można pobrać danych, kod: {response.status_code}")
 
     def showResults(self, data, limit=9):
-        elements = data.get("collection", {}).get("items", [])
+        elements = data.get("collection", {}).get("items", []) #pobiera listę wyników z odpowiedzi JSON.
         if not elements:
             print("Nie znaleziono wyników")
             return []
@@ -28,7 +27,7 @@ class NASAimages:
         results = []
         for element in elements[:limit]:
             data_element = element.get("data", [])
-            links = element.get("links", [])
+            links = element.get("links", []) #iteruje po wynikach, pobiera dane i linki.
 
             title = data_element[0].get("title", "Brak tytułu") if data_element else "Brak tytułu"
             link = links[0].get("href", "Brak linku") if links else "Brak linku"
@@ -36,7 +35,7 @@ class NASAimages:
             results.append((title, link))
         return results
 
-
+#otwiera nowy obrazek z URL.
 def showImageFromUrl(url):
     response = requests.get(url)
     if response.status_code == 200:
@@ -46,10 +45,13 @@ def showImageFromUrl(url):
 
         top = tk.Toplevel(bg="black")
         top.title("Podgląd")
+        top.state("zoomed")
 
+#ramka z zielonym tłem (obramowanie).
         border_frame = tk.Frame(top, bg="green", padx=5, pady=5)
         border_frame.pack(padx=20, pady=20)
 
+#wewnetrzna ramka na obrazek
         inner_frame = tk.Frame(border_frame, bg="black")
         inner_frame.pack()
 
@@ -60,9 +62,14 @@ def showImageFromUrl(url):
     else:
         print("Nie udało się załadować obrazka")
 
-
+    #wczytuje obrazek jako miniature
 def loadThumbnail(url, label, size=(100, 100)):
+
+#pobiera, tworzy miniaturę i przypisuje ją do label
     try:
+        text_log.insert("end", f"pobieranie miniatury: {url}\n")
+        text_log.see("end")
+
         response = requests.get(url)
         if response.status_code == 200:
             img_data = response.content
@@ -71,22 +78,34 @@ def loadThumbnail(url, label, size=(100, 100)):
             tk_img = ImageTk.PhotoImage(img)
             label.configure(image=tk_img, bg="black")
             label.image = tk_img
+
+            text_log.insert("end", f"udalo sie, zaladowano miniature\n")
+            text_log.see("end")
+        else:
+            text_log.insert("end", f"blad HTTP: {response.status_code}\n")
+            text_log.see("end")
+
     except Exception as e:
-        print(f"Błąd podczas ładowania zdjęcia: {e}")
+        text_log.insert("end", f"blad poczas ladowania miniatury: {e}\n")
+        text_log.see("end")
 
 
 def search():
+    # pobiera wpisane zapytanie
     query = entry.get()
     for widget in output_frame.winfo_children():
         widget.destroy()
 
+#komunikat ladowanie
     global loading_label
     loading_label = tk.Label(output_frame, text="Ładowanie...", bg="black", fg="green")
     loading_label.pack(pady=10)
     root.update_idletasks()
 
+#instancja klasy nasaimages
     fetcher = NASAimages()
 
+#pobieranie i przetwarzanie danych
     try:
         data = fetcher.pobierzZdjecia(query)
         results = fetcher.showResults(data)
@@ -101,12 +120,13 @@ def search():
             text_log.see("end")
             return
 
-        # Konfiguracja siatki 3x3
+        #konfiguracja siatki 3x3
         for col in range(3):
             output_frame.columnconfigure(col, weight=1)
         for row in range(3):
             output_frame.rowconfigure(row, weight=1)
 
+#iteruje po wynikach i tworzy dla każdego ramkę z miniaturą, tytułem i przyciskiem
         for i, (title, link) in enumerate(results):
             row = i // 3
             column = i % 3
@@ -145,15 +165,16 @@ def search():
         text_log.insert("end", f"Błąd: {e}\n")
         text_log.see("end")
 
-
+#glowne okno, rozmiar, kolor
 root = tk.Tk()
 root.title("NASAimages")
 root.geometry("1000x800")
 root.config(bg="black")
 root.rowconfigure(1, weight=1)
-root.columnconfigure(0, weight=3)
-root.columnconfigure(1, weight=2)
+root.columnconfigure(0, weight=4)
+root.columnconfigure(1, weight=1)
 
+#gorny panel
 input_frame = tk.Frame(root, bg="black")
 input_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
 
@@ -162,16 +183,19 @@ entry = tk.Entry(input_frame, width=40, bg="black", fg="green", insertbackground
 entry.pack(side="left", padx=5)
 tk.Button(input_frame, text="Szukaj", command=search, bg="black", fg="green", highlightbackground="green").pack(side="left", padx=5)
 
+#wyniki i logi
 output_frame = tk.LabelFrame(root, text="Wyniki", bg="black", fg="green", highlightbackground="green", highlightcolor="green", bd=2)
-output_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+output_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 80), pady=10)
 output_frame.grid_propagate(False)  # zapobiega zmianie rozmiaru przez zawartość
 
 log_frame = tk.LabelFrame(root, text="Logi", bg="black", fg="green", highlightbackground="green", highlightcolor="green", bd=2)
-log_frame.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+log_frame.config(width=300, height=400)
+log_frame.grid_propagate(False)
+log_frame.grid(row=1, column=1, sticky="nsew", padx=(80, 10), pady=10)
 
 loading_label = None
 
-text_log = tk.Text(log_frame, width=40, height=30, bg="black", fg="green", insertbackground="green")
+text_log = tk.Text(log_frame, width=10, height=30, bg="black", fg="green", insertbackground="green")
 text_log.pack(fill="both", expand=True)
 
 root.mainloop()
