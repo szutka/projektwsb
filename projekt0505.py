@@ -1,201 +1,188 @@
-import tkinter as tk
-from io import BytesIO
-import requests
-from PIL import Image, ImageTk
-from PIL.ImageTk import PhotoImage
+import tkinter as tk  # import tkinter do gui
+from io import BytesIO  # do przetwarzania obrazkow w pamieci
+import requests  # do pobierania danych z internetu
+from PIL import Image, ImageTk  # do obslugi obrazow i integracji z tkinter
 
-
-class NASAimages:
+class NASAImages:
     def __init__(self):
-        self.api_url = "https://images-api.nasa.gov/search"
+        self.api_url = "https://images-api.nasa.gov/search"  # api nasa do wyszukiwania obrazow
 
-    def pobierzZdjecia(self, query):
-        params = {'q': query} #params to zapytanie GET (np. ?q=moon).
-        response = requests.get(self.api_url, params=params)
-
-        if response.status_code == 200:
-            return response.json()
+    def fetch_images(self, query):
+        params = {'q': query}  # parametry zapytania z kluczem 'q'
+        response = requests.get(self.api_url, params=params)  # wyslij zapytanie get do api
+        if response.status_code == 200:  # jesli odpowiedz ok
+            return response.json()  # zwroc dane w formacie json
         else:
-            raise Exception(f"Nie można pobrać danych, kod: {response.status_code}")
+            # rzuc wyjatek gdy status inny niz 200
+            raise Exception(f"nie można pobrać danych,kod:{response.status_code}")
 
-    def showResults(self, data, limit=9):
-        elements = data.get("collection", {}).get("items", []) #pobiera listę wyników z odpowiedzi JSON.
-        if not elements:
-            print("Nie znaleziono wyników")
-            return []
+    def extract_results(self, data, limit=9):
+        # wyciagnij liste elementow z jsona
+        elements = data.get("collection", {}).get("items", [])
+        if not elements:  # sprawdz czy sa elementy
+            return []  # zwroc pusta liste jesli brak
 
-        results = []
-        for element in elements[:limit]:
+        results = []  # lista na wyniki
+        for element in elements[:limit]:  # ogranicz do limitu wynikow
             data_element = element.get("data", [])
-            links = element.get("links", []) #iteruje po wynikach, pobiera dane i linki.
+            links = element.get("links", [])
 
-            title = data_element[0].get("title", "Brak tytułu") if data_element else "Brak tytułu"
-            link = links[0].get("href", "Brak linku") if links else "Brak linku"
+            # pobierz tytul jesli jest, inaczej tekst domyslny
+            title = data_element[0].get("title", "brak tytułu") if data_element else "brak tytułu"
+            # pobierz link do obrazka lub placeholder
+            link = links[0].get("href", "brak linku") if links else "brak linku"
 
-            results.append((title, link))
-        return results
+            results.append((title, link))  # dodaj tuple (tytul,link) do wynikow
+        return results  # zwroc liste wynikow
 
-#otwiera nowy obrazek z URL.
-def showImageFromUrl(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        img_data = response.content
-        img = Image.open(BytesIO(img_data))
-        img = img.resize((400, 400))
+class ImageLoader:
+    def __init__(self, log_widget):
+        self.log_widget = log_widget  # widget do wyswietlania logow
 
-        top = tk.Toplevel(bg="black")
-        top.title("Podgląd")
-        top.state("zoomed")
+    def log(self, message):
+        # dodaj wiadomosc do text widgetu i przewin do konca
+        self.log_widget.insert("end", message + "\n")
+        self.log_widget.see("end")
 
-#ramka z zielonym tłem (obramowanie).
-        border_frame = tk.Frame(top, bg="green", padx=5, pady=5)
-        border_frame.pack(padx=20, pady=20)
+    def show_image_from_url(self, url):
+        response = requests.get(url)  # pobierz obrazek z internetu
+        if response.status_code == 200:  # jesli pobranie sie powiodlo
+            img_data = response.content  # zawartosc obrazka w bajtach
+            img = Image.open(BytesIO(img_data)).resize((600, 600))  # otworz i zmien rozmiar
 
-#wewnetrzna ramka na obrazek
-        inner_frame = tk.Frame(border_frame, bg="black")
-        inner_frame.pack()
+            top = tk.Toplevel(bg="black")  # nowe okno do wyswietlania obrazka
+            top.title("podgląd")  # tytul okna
+            top.state("zoomed")  # otworz w trybie pelnoekranowym
 
-        tk_img: PhotoImage = ImageTk.PhotoImage(img)
-        label = tk.Label(inner_frame, image=tk_img, bg="black")
-        label.image = tk_img
-        label.pack()
-    else:
-        print("Nie udało się załadować obrazka")
+            border_frame = tk.Frame(top, bg="green", padx=5, pady=5)  # ramka z zielona ramka
+            border_frame.pack(padx=20, pady=20)  # odstepy zewnatrz ramki
 
-    #wczytuje obrazek jako miniature
-def loadThumbnail(url, label, size=(100, 100)):
+            inner_frame = tk.Frame(border_frame, bg="black")  # czarna ramka w srodku
+            inner_frame.pack()
 
-#pobiera, tworzy miniaturę i przypisuje ją do label
-    try:
-        text_log.insert("end", f"pobieranie miniatury: {url}\n")
-        text_log.see("end")
-
-        response = requests.get(url)
-        if response.status_code == 200:
-            img_data = response.content
-            img = Image.open(BytesIO(img_data))
-            img.thumbnail(size)
-            tk_img = ImageTk.PhotoImage(img)
-            label.configure(image=tk_img, bg="black")
-            label.image = tk_img
-
-            text_log.insert("end", f"udalo sie, zaladowano miniature\n")
-            text_log.see("end")
+            tk_img = ImageTk.PhotoImage(img)  # konwersja obrazka do formatu tkinter
+            label = tk.Label(inner_frame, image=tk_img, bg="black")  # etykieta do wyswietlania
+            label.image = tk_img  # zapamietaj referencje zeby obrazek sie nie usunal
+            label.pack()  # umiesc etykiete w ramce
         else:
-            text_log.insert("end", f"blad HTTP: {response.status_code}\n")
-            text_log.see("end")
+            self.log("nie udało się załadować obrazka")  # blad przy pobieraniu obrazka
 
-    except Exception as e:
-        text_log.insert("end", f"blad poczas ladowania miniatury: {e}\n")
-        text_log.see("end")
+    def load_thumbnail(self, url, label, size=(100, 100)):
+        try:
+            self.log(f"pobieranie miniatury:{url}")  # loguj rozpoczecie pobierania miniatury
+            response = requests.get(url)  # pobierz obrazek
+            if response.status_code == 200:  # jesli ok
+                img_data = response.content
+                img = Image.open(BytesIO(img_data))  # otworz obrazek
+                img.thumbnail(size)  # zmien rozmiar na miniature
+                tk_img = ImageTk.PhotoImage(img)  # konwersja do tkinter
+                label.configure(image=tk_img, bg="black")  # ustaw obrazek w label
+                label.image = tk_img  # zapamietaj referencje
+                self.log("udało się, załadowano miniaturę")  # log sukcesu
+            else:
+                self.log(f"błąd http:{response.status_code}")  # log kod bledu http
+        except Exception as e:
+            self.log(f"błąd podczas ładowania miniatury:{e}")  # log wyjatku
 
+class SearchInterface:
+    def __init__(self, root):
+        self.root = root  # glowne okno aplikacji
+        self.root.title("nasa images")  # tytul okna
+        self.root.geometry("1000x800")  # rozmiar okna
+        self.style = {"bg": "black", "fg": "green"}  # definicja stylu kolorow
+        self.root.config(bg=self.style["bg"])  # ustaw kolor tla glownego okna
+        self.root.rowconfigure(1, weight=1)  # konfiguracja wiersza 1 na rozciagliwy
+        self.root.columnconfigure(0, weight=4)  # kolumna 0 - 4 razy szersza
+        self.root.columnconfigure(1, weight=1)  # kolumna 1 - mniej szeroka
 
-def search():
-    # pobiera wpisane zapytanie
-    query = entry.get()
-    for widget in output_frame.winfo_children():
-        widget.destroy()
+        self.setup_gui()  # budowa interfejsu
 
-#komunikat ladowanie
-    global loading_label
-    loading_label = tk.Label(output_frame, text="Ładowanie...", bg="black", fg="green")
-    loading_label.pack(pady=10)
-    root.update_idletasks()
+        self.nasa_fetcher = NASAImages()  # obiekt do pobierania danych z api
+        self.image_loader = ImageLoader(self.text_log)  # obiekt do ladowania obrazkow i logowania
+        self.loading_label = None  # label pokazujacy status ladowania
 
-#instancja klasy nasaimages
-    fetcher = NASAimages()
+    def setup_gui(self):
+        input_frame = tk.Frame(self.root, bg=self.style["bg"])  # ramka na pole tekstowe i przycisk
+        input_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)  # umiesc u gory
 
-#pobieranie i przetwarzanie danych
-    try:
-        data = fetcher.pobierzZdjecia(query)
-        results = fetcher.showResults(data)
+        tk.Label(input_frame, text="podaj zapytanie:", **self.style).pack(side="left", padx=5)  # label
+        self.entry = tk.Entry(input_frame, width=40, bg=self.style["bg"], fg=self.style["fg"],
+                              insertbackground=self.style["fg"])  # pole tekstowe
+        self.entry.pack(side="left", padx=5)
+        tk.Button(input_frame, text="szukaj", command=self.search, bg=self.style["bg"], fg=self.style["fg"],
+                  highlightbackground=self.style["fg"]).pack(side="left", padx=5)  # przycisk szukaj
 
-        if loading_label and loading_label.winfo_exists():
-            loading_label.destroy()
+        self.output_frame = tk.LabelFrame(self.root, text="wyniki", bg=self.style["bg"], fg=self.style["fg"],
+                                          highlightbackground=self.style["fg"], bd=2)  # ramka na wyniki
+        self.output_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 80), pady=10)  # po lewej
+        self.output_frame.grid_propagate(False)  # nie zmieniaj rozmiaru ramki automatycznie
 
-        if not results:
-            no_results = tk.Label(output_frame, text="Nie znaleziono", bg="black", fg="green")
-            no_results.pack(pady=10)
-            text_log.insert("end", f"Brak wyników dla: {query}\n")
-            text_log.see("end")
-            return
+        self.log_frame = tk.LabelFrame(self.root, text="logi", bg=self.style["bg"], fg=self.style["fg"],
+                                       highlightbackground=self.style["fg"], bd=2)  # ramka na logi
+        self.log_frame.grid(row=1, column=1, sticky="nsew", padx=(80, 10), pady=10)  # po prawej
 
-        #konfiguracja siatki 3x3
-        for col in range(3):
-            output_frame.columnconfigure(col, weight=1)
-        for row in range(3):
-            output_frame.rowconfigure(row, weight=1)
+        self.text_log = tk.Text(self.log_frame, width=10, height=30, bg=self.style["bg"], fg=self.style["fg"],
+                                insertbackground=self.style["fg"])  # widget text do logow
+        self.text_log.pack(fill="both", expand=True)
 
-#iteruje po wynikach i tworzy dla każdego ramkę z miniaturą, tytułem i przyciskiem
-        for i, (title, link) in enumerate(results):
-            row = i // 3
-            column = i % 3
+    def search(self):
+        query = self.entry.get().strip()  # pobierz tekst z pola i obetnij spacje
+        for widget in self.output_frame.winfo_children():
+            widget.destroy()  # wyczysc poprzednie wyniki wyswietlania
 
-            result_frame = tk.Frame(output_frame, bg="black", bd=2, relief="groove", padx=5, pady=5)
-            result_frame.grid(row=row, column=column, padx=5, pady=5, sticky="nsew")
+        self.loading_label = tk.Label(self.output_frame, text="ładowanie...", **self.style)  # pokaz label z napisem
+        self.loading_label.pack(pady=10)
+        self.root.update_idletasks()  # wymusz odswiezenie GUI
 
-            thumbnail_label = tk.Label(result_frame, bg="black", fg="green")
-            thumbnail_label.pack(fill="both", expand=True, pady=5)
-            loadThumbnail(link, thumbnail_label)
+        try:
+            data = self.nasa_fetcher.fetch_images(query)  # pobierz dane z api nasa
+            results = self.nasa_fetcher.extract_results(data)  # wyciagnij z jsona tytuly i linki
 
-            text_button_frame = tk.Frame(result_frame, bg="black")
-            text_button_frame.pack(fill="both", expand=True)
+            if self.loading_label and self.loading_label.winfo_exists():
+                self.loading_label.destroy()  # usun label ladowania
 
-            title_label = tk.Label(text_button_frame, text=f"{i+1}. {title}", anchor="w", justify="left", bg="black", fg="green")
-            title_label.pack(fill="x")
+            if not results:
+                # brak wynikow wyswietl komunikat
+                tk.Label(self.output_frame, text="nie znaleziono", **self.style).pack(pady=10)
+                self.text_log.insert("end", f"brak wyników dla:{query}\n")  # wpisz do logow
+                self.text_log.see("end")
+                return
 
-            button = tk.Button(
-                text_button_frame,
-                text="Pokaż pełny obraz",
-                command=lambda url=link: showImageFromUrl(url),
-                bg="black",
-                fg="green",
-                activebackground="green",
-                activeforeground="black",
-                highlightbackground="green",
-            )
-            button.pack(pady=5)
+            # konfiguruj siatke 3x3 w output_frame
+            for i in range(3):
+                self.output_frame.columnconfigure(i, weight=1)  # 3 kolumny rowne
+                self.output_frame.rowconfigure(i, weight=1)  # 3 wiersze rowne
 
-        text_log.insert("end", f"Sukces, pobrano {query}\n")
-        text_log.see("end")
+            for i, (title, link) in enumerate(results):  # iteruj po wynikach z numerem i
+                row = i // 3  # wylicz wiersz
+                column = i % 3  # wylicz kolumne
 
-    except Exception as e:
-        if loading_label and loading_label.winfo_exists():
-            loading_label.destroy()
-        text_log.insert("end", f"Błąd: {e}\n")
-        text_log.see("end")
+                result_frame = tk.Frame(self.output_frame, bg=self.style["bg"], bd=2, relief="groove", padx=5, pady=5)
+                    # ramka pojedynczego wyniku
+                result_frame.grid(row=row, column=column, padx=5, pady=5, sticky="nsew")  # umiesc w gridzie
 
-#glowne okno, rozmiar, kolor
-root = tk.Tk()
-root.title("NASAimages")
-root.geometry("1000x800")
-root.config(bg="black")
-root.rowconfigure(1, weight=1)
-root.columnconfigure(0, weight=4)
-root.columnconfigure(1, weight=1)
+                thumbnail_label = tk.Label(result_frame, bg=self.style["bg"], fg=self.style["fg"], cursor="hand2")
+                    # label na miniature
+                thumbnail_label.pack(fill="both", expand=True, pady=5)
+                    # powiaz klikniecie etykiety z funkcja pokazujaca obrazek
 
-#gorny panel
-input_frame = tk.Frame(root, bg="black")
-input_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+                thumbnail_label.bind("<Button-1>", lambda e, url=link: self.image_loader.show_image_from_url(url))
+                self.image_loader.load_thumbnail(link, thumbnail_label)  # zaladuj miniature do labela
 
-tk.Label(input_frame, text="Podaj zapytanie: ", bg="black", fg="green").pack(side="left", padx=5)
-entry = tk.Entry(input_frame, width=40, bg="black", fg="green", insertbackground="green")
-entry.pack(side="left", padx=5)
-tk.Button(input_frame, text="Szukaj", command=search, bg="black", fg="green", highlightbackground="green").pack(side="left", padx=5)
+                title_label = tk.Label(result_frame, text=f"{i+1}. {title}", anchor="w", justify="left", **self.style)
+                    # etykieta tytulu
+                title_label.pack(fill="x")  # wypelnij poziomo
 
-#wyniki i logi
-output_frame = tk.LabelFrame(root, text="Wyniki", bg="black", fg="green", highlightbackground="green", highlightcolor="green", bd=2)
-output_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 80), pady=10)
-output_frame.grid_propagate(False)  # zapobiega zmianie rozmiaru przez zawartość
+            self.text_log.insert("end", f"sukces,pobrano:{query}\n")  # log sukcesu
+            self.text_log.see("end")  # przewin log
 
-log_frame = tk.LabelFrame(root, text="Logi", bg="black", fg="green", highlightbackground="green", highlightcolor="green", bd=2)
-log_frame.config(width=300, height=400)
-log_frame.grid_propagate(False)
-log_frame.grid(row=1, column=1, sticky="nsew", padx=(80, 10), pady=10)
+        except Exception as e:
+            if self.loading_label and self.loading_label.winfo_exists():
+                self.loading_label.destroy()  # usun label ladowania w razie bledu
+            self.text_log.insert("end", f"błąd:{e}\n")  # wypisz blad do logu
+            self.text_log.see("end")
 
-loading_label = None
-
-text_log = tk.Text(log_frame, width=10, height=30, bg="black", fg="green", insertbackground="green")
-text_log.pack(fill="both", expand=True)
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()  # utworz glowne okno
+    app = SearchInterface(root)  # stworz instancje aplikacji
+    root.mainloop()  # uruchom petle zdarzen
